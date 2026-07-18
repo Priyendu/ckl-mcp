@@ -28,6 +28,7 @@ protected from accidental close.
 | `bulk_update_findings` | Same edits across many findings, selected by ids or filters |
 | `update_asset` | Edit target-asset fields (host name, IP, MAC, FQDN, …) |
 | `apply_xccdf_results` | Apply SCAP XCCDF scan results: pass/fail/notapplicable update matching findings |
+| `merge_prior_assessment` | Carry a prior assessment into a new STIG release (flags or resets rules whose text changed) |
 | `save_checklist` | Save in place, or save-as with `.ckl` ↔ `.cklb` format conversion |
 | `export_excel_report` | Vulnerator-style workbook: Executive Summary, POA&M, Vulnerability Details |
 | `compare_checklists` | Diff two checklists: status changes and added/removed findings |

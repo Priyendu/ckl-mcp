@@ -192,6 +192,61 @@ public sealed class ToolTests : IDisposable
     }
 
     [Fact]
+    public void MergePriorAssessmentCarriesStatusesAndMarksTargetDirty()
+    {
+        // doc-1: prior assessment; doc-2: fresh checklist of the same STIG with one rule's text changed.
+        var prior = SampleData.BuildChecklist();
+        var fresh = SampleData.BuildChecklist();
+        foreach (var v in fresh.AllVulnerabilities)
+        {
+            v.Status = FindingStatus.NotReviewed;
+            v.FindingDetails = string.Empty;
+            v.Comments = string.Empty;
+        }
+
+        fresh.AllVulnerabilities.Single(v => v.VulnId == "V-220706").CheckContent = "Rewritten check text.";
+
+        var priorPath = Path.Combine(_dir, "prior.ckl");
+        var freshPath = Path.Combine(_dir, "fresh.ckl");
+        CklWriter.WriteFile(prior, priorPath);
+        CklWriter.WriteFile(fresh, freshPath);
+        _tools.LoadChecklists(new[] { priorPath, freshPath });
+
+        var outcome = Parse(_tools.MergePriorAssessment("doc-2", "doc-1"));
+        Assert.Equal(3, outcome.GetProperty("carried").GetInt32());
+        Assert.Equal(1, outcome.GetProperty("changedRuleText").GetInt32());
+        Assert.True(_workspace.Documents[1].Dirty);
+
+        var merged = _workspace.Documents[1].Document.AllVulnerabilities.ToDictionary(v => v.VulnId);
+        Assert.Equal(FindingStatus.Open, merged["V-220697"].Status);
+        Assert.Equal("System is running Windows 10 Pro.", merged["V-220697"].FindingDetails);
+        Assert.Equal(FindingStatus.NotAFinding, merged["V-220706"].Status);
+        Assert.Contains("re-verify", merged["V-220706"].FindingDetails);
+
+        Assert.Throws<McpException>(() => _tools.MergePriorAssessment("doc-2", "doc-2"));
+    }
+
+    [Fact]
+    public void MergePriorAssessmentResetsChangedRulesWhenAsked()
+    {
+        var prior = SampleData.BuildChecklist();
+        var fresh = SampleData.BuildChecklist();
+        fresh.AllVulnerabilities.Single(v => v.VulnId == "V-220697").FixText = "New fix procedure.";
+
+        var priorPath = Path.Combine(_dir, "prior.ckl");
+        var freshPath = Path.Combine(_dir, "fresh.ckl");
+        CklWriter.WriteFile(prior, priorPath);
+        CklWriter.WriteFile(fresh, freshPath);
+        _tools.LoadChecklists(new[] { priorPath, freshPath });
+
+        _tools.MergePriorAssessment("doc-2", "doc-1", resetChangedRules: true);
+
+        var vuln = _workspace.Documents[1].Document.AllVulnerabilities.Single(v => v.VulnId == "V-220697");
+        Assert.Equal(FindingStatus.NotReviewed, vuln.Status);
+        Assert.Contains("status reset to Not Reviewed", vuln.FindingDetails);
+    }
+
+    [Fact]
     public void ReadOnlyModeBlocksEditsButAllowsExport()
     {
         var readOnlyTools = new ChecklistTools(_workspace, ServerOptions.Parse(new[] { "--read-only" }));

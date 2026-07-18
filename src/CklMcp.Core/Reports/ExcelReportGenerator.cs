@@ -21,13 +21,37 @@ public static class ExcelReportGenerator
     private static readonly XLColor NotApplicableFill = XLColor.FromArgb(0x9A, 0xA7, 0xAD);
     private static readonly XLColor NotReviewedFill = XLColor.FromArgb(0xF0, 0xB4, 0x00);
 
+    // Fixed location of the status-totals block the pie chart references (Executive Summary).
+    internal const string SummarySheetName = "Executive Summary";
+    internal const int StatusTotalsRow = 5;        // first data row (Open); header sits one row above
+    internal const int StatusTotalsLabelCol = 13;  // M
+    internal const int StatusTotalsValueCol = 14;  // N
+
     public static void WriteReport(IReadOnlyList<ChecklistDocument> documents, string path, bool colorCodeStatus = true)
     {
-        using var workbook = new XLWorkbook();
-        BuildSummarySheet(workbook, documents);
-        BuildPoamSheet(workbook, documents);
-        BuildDetailsSheet(workbook, documents, colorCodeStatus);
-        workbook.SaveAs(path);
+        byte[] bytes;
+        using (var workbook = new XLWorkbook())
+        {
+            BuildSummarySheet(workbook, documents);
+            BuildPoamSheet(workbook, documents);
+            BuildDetailsSheet(workbook, documents, colorCodeStatus);
+            using var clean = new MemoryStream();
+            workbook.SaveAs(clean);
+            bytes = clean.ToArray();
+        }
+
+        // ClosedXML can't create charts, so inject a native pie via OpenXML. If anything
+        // goes wrong, fall back to the (valid) chartless workbook rather than a corrupt file.
+        try
+        {
+            bytes = StatusPieChart.Inject(bytes);
+        }
+        catch
+        {
+            // keep the chartless workbook
+        }
+
+        File.WriteAllBytes(path, bytes);
     }
 
     private static void BuildSummarySheet(XLWorkbook workbook, IReadOnlyList<ChecklistDocument> documents)
@@ -51,6 +75,7 @@ public static class ExcelReportGenerator
             StyleHeader(sheet.Cell(startRow, i + 1), headers[i]);
         }
 
+        int totalOpen = 0, totalNaf = 0, totalNa = 0, totalNr = 0;
         var row = startRow + 1;
         foreach (var document in documents)
         {
@@ -69,6 +94,11 @@ public static class ExcelReportGenerator
                 var na = Count(v => v.Status == FindingStatus.NotApplicable);
                 var nr = Count(v => v.Status == FindingStatus.NotReviewed);
                 var evaluated = total - na;
+
+                totalOpen += open;
+                totalNaf += naf;
+                totalNa += na;
+                totalNr += nr;
 
                 sheet.Cell(row, 1).Value = Sanitize(assetName, 500);
                 sheet.Cell(row, 2).Value = Sanitize(string.IsNullOrWhiteSpace(stig.Title) ? stig.StigId : stig.Title, 500);
@@ -98,6 +128,33 @@ public static class ExcelReportGenerator
         sheet.SheetView.FreezeRows(startRow);
 
         BuildStatusLegend(sheet, row + 2);
+        BuildStatusTotals(sheet, totalOpen, totalNaf, totalNa, totalNr);
+    }
+
+    /// <summary>
+    /// Writes the aggregate status counts to a fixed block (M4:N8) that the pie chart
+    /// on this sheet references. Kept clear of the main table's columns (A–K).
+    /// </summary>
+    private static void BuildStatusTotals(IXLWorksheet sheet, int open, int naf, int na, int nr)
+    {
+        sheet.Cell(StatusTotalsRow - 1, StatusTotalsLabelCol).Value = "Findings by status";
+        sheet.Cell(StatusTotalsRow - 1, StatusTotalsLabelCol).Style.Font.SetBold();
+
+        var rows = new (string Label, int Value)[]
+        {
+            ("Open", open),
+            ("Not a Finding", naf),
+            ("Not Applicable", na),
+            ("Not Reviewed", nr)
+        };
+
+        for (var i = 0; i < rows.Length; i++)
+        {
+            sheet.Cell(StatusTotalsRow + i, StatusTotalsLabelCol).Value = rows[i].Label;
+            sheet.Cell(StatusTotalsRow + i, StatusTotalsValueCol).Value = rows[i].Value;
+        }
+
+        sheet.Column(StatusTotalsLabelCol).AdjustToContents();
     }
 
     private static void BuildStatusLegend(IXLWorksheet sheet, int row)

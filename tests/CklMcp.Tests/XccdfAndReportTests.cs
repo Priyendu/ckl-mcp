@@ -69,6 +69,33 @@ public class XccdfAndReportTests
     }
 
     [Fact]
+    public void ReportEmbedsAStatusPieChart()
+    {
+        var document = SampleData.BuildChecklist();
+        var reportPath = Path.Combine(Path.GetTempPath(), $"ckl-viewer-test-{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            ExcelReportGenerator.WriteReport(new[] { document }, reportPath);
+
+            // The workbook must still open cleanly (ClosedXML round-trips the chart-bearing package)...
+            using (var workbook = new XLWorkbook(reportPath))
+            {
+                var summary = workbook.Worksheet("Executive Summary");
+                Assert.Equal("Open", summary.Cell(5, 13).GetString());       // M5
+                Assert.Equal(1, summary.Cell(5, 14).GetValue<int>());        // N5 = 1 open in the sample
+            }
+
+            // ...and a chart part must be present in the package.
+            using var archive = System.IO.Compression.ZipFile.OpenRead(reportPath);
+            Assert.Contains(archive.Entries, e => e.FullName.Contains("chart", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            File.Delete(reportPath);
+        }
+    }
+
+    [Fact]
     public void ExcelReportAggregatesMultipleChecklists()
     {
         var first = SampleData.BuildChecklist();

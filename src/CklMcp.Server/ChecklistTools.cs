@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CklViewer.Merging;
 using CklViewer.Models;
 using CklViewer.Parsing;
 using CklViewer.Reports;
@@ -560,6 +561,50 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
                 savedTo = full,
                 checklists = targets.Select(t => t.Id)
             }, Json);
+        }
+    }
+
+    [McpServerTool(Name = "merge_prior_assessment")]
+    [Description("Carry a prior assessment forward into a new STIG release. The target checklist " +
+                 "(typically freshly created via new_from_benchmark) keeps its rule set; the source " +
+                 "checklist supplies status, finding details, comments, and severity overrides, " +
+                 "matched by rule version, then V-key, then legacy IDs. Rules whose check/fix text " +
+                 "changed between versions get an audit note — or are reset to Not Reviewed when " +
+                 "reset_changed_rules is true. The target is modified in memory; save_checklist persists it.")]
+    public string MergePriorAssessment(
+        [Description("Document id of the new-version checklist to merge into.")] string targetDocumentId,
+        [Description("Document id of the prior assessment supplying statuses and notes.")]
+        string sourceDocumentId,
+        [Description("Reset findings whose rule text changed to Not Reviewed instead of carrying " +
+                     "their status with a re-verify note (default false).")]
+        bool resetChangedRules = false)
+    {
+        options.RequireWritable("merge_prior_assessment");
+        lock (workspace.SyncRoot)
+        {
+            var target = workspace.GetRequired(targetDocumentId);
+            var source = workspace.GetRequired(sourceDocumentId);
+            if (ReferenceEquals(target, source))
+            {
+                throw new McpException("target_document_id and source_document_id must differ.");
+            }
+
+            var outcome = ChecklistMerger.Merge(target.Document, source.Document, resetChangedRules);
+            target.Dirty = true;
+
+            var result = new
+            {
+                targetDocumentId = target.Id,
+                sourceDocumentId = source.Id,
+                carried = outcome.Carried,
+                unchangedRuleText = outcome.Unchanged,
+                changedRuleText = outcome.Changed,
+                newRules = outcome.NewRules,
+                removedRules = outcome.Removed,
+                resetChangedRules,
+                unsavedChanges = true
+            };
+            return JsonSerializer.Serialize(result, Json);
         }
     }
 
