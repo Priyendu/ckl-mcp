@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CklViewer</RootNamespace>
+    <Authors>Priyendu</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Description>Core CKL/CKLB parsing, writing, and reporting. Sourced from https://github.com/Priyendu/Ckl-viewer (MIT).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CklMcp.Tests" />
+  </ItemGroup>
+
+</Project>
