@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: # manual runs build the zips and upload them as workflow artifacts, without creating a release
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          # SDK 10 understands the .slnx solution; runtime 8 runs the net8.0 tests.
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Test
+        run: dotnet test CklMcp.slnx -c Release
+
+      - name: Publish framework-dependent
+        run: dotnet publish src/CklMcp.Server -c Release -r win-x64 -p:SelfContained=false -p:PublishSingleFile=true -p:DebugType=none -o publish/fd
+
+      - name: Publish self-contained
+        run: dotnet publish src/CklMcp.Server -c Release -r win-x64 -p:SelfContained=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish/sc
+
+      # Note: use $env:GITHUB_REF_NAME instead of `${{ github.ref_name }}` inside scripts —
+      # inline expression interpolation into a script is a script-injection vector.
+      - name: Zip artifacts
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($env:GITHUB_REF_TYPE -ne 'tag') { $version = 'ci' }
+          Compress-Archive -Path publish/fd/* -DestinationPath "CklMcp-$version-win-x64-framework-dependent.zip"
+          Compress-Archive -Path publish/sc/* -DestinationPath "CklMcp-$version-win-x64-self-contained.zip"
+
+      - name: Upload workflow artifacts
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CklMcp-win-x64
+          path: "*.zip"
+
+      - name: Create GitHub release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME (Get-ChildItem *.zip) `
+            --title "ckl-mcp $env:GITHUB_REF_NAME" `
+            --generate-notes `
+            --notes "MCP stdio server for DISA STIG checklists — point your MCP host (VS Code Copilot, Claude Code, Claude Desktop) at CklMcp.Server.exe; see the README for config snippets. The framework-dependent zip needs the [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0); the self-contained zip runs on any 64-bit Windows 10/11 machine. Unclassified data only."
