@@ -252,7 +252,8 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
                 checkContent = v.CheckContent,
                 fixText = v.FixText,
                 findingDetails = v.FindingDetails,
-                comments = v.Comments
+                comments = v.Comments,
+                internalNotes = NullIfEmpty(v.InternalNotes)
             };
             return JsonSerializer.Serialize(result, Json);
         }
@@ -274,13 +275,17 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
         [Description("Replacement Comments text.")] string? comments = null,
         [Description("Severity override: high, medium, or low. Pass an empty string to clear.")]
         string? severityOverride = null,
-        [Description("Justification for the severity override.")] string? severityJustification = null)
+        [Description("Justification for the severity override.")] string? severityJustification = null,
+        [Description("Replacement team-internal notes. Never written to .ckl/.cklb; only appears " +
+                     "in Excel reports when export_excel_report's include_internal_notes is true " +
+                     "(the default).")]
+        string? internalNotes = null)
     {
         options.RequireWritable("update_finding");
         lock (workspace.SyncRoot)
         {
             var (entry, v) = workspace.ResolveFinding(vulnId, documentId);
-            ApplyEdits(v, status, findingDetails, comments, severityOverride, severityJustification);
+            ApplyEdits(v, status, findingDetails, comments, severityOverride, severityJustification, internalNotes);
             entry.Dirty = true;
 
             var result = new
@@ -292,6 +297,7 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
                 findingDetails = v.FindingDetails,
                 comments = v.Comments,
                 severityOverride = NullIfEmpty(v.SeverityOverride),
+                internalNotes = NullIfEmpty(v.InternalNotes),
                 unsavedChanges = true
             };
             return JsonSerializer.Serialize(result, Json);
@@ -317,12 +323,16 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
         string? setStatus = null,
         [Description("Finding Details text to set on every selected finding.")]
         string? setFindingDetails = null,
-        [Description("Comments text to set on every selected finding.")] string? setComments = null)
+        [Description("Comments text to set on every selected finding.")] string? setComments = null,
+        [Description("Team-internal notes to set on every selected finding. Never written to " +
+                     ".ckl/.cklb.")]
+        string? setInternalNotes = null)
     {
         options.RequireWritable("bulk_update_findings");
-        if (setStatus is null && setFindingDetails is null && setComments is null)
+        if (setStatus is null && setFindingDetails is null && setComments is null && setInternalNotes is null)
         {
-            throw new McpException("Nothing to do: provide set_status, set_finding_details, or set_comments.");
+            throw new McpException(
+                "Nothing to do: provide set_status, set_finding_details, set_comments, or set_internal_notes.");
         }
 
         var hasFilter = whereStatus is not null || whereSeverity is not null ||
@@ -349,7 +359,7 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
 
             foreach (var (entry, v) in targets)
             {
-                ApplyEdits(v, setStatus, setFindingDetails, setComments, null, null);
+                ApplyEdits(v, setStatus, setFindingDetails, setComments, null, null, setInternalNotes);
                 entry.Dirty = true;
             }
 
@@ -536,12 +546,18 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
 
     [McpServerTool(Name = "export_excel_report")]
     [Description("Generate the Vulnerator-style Excel workbook (Executive Summary, POA&M, and " +
-                 "Vulnerability Details tabs) covering the selected checklists. Allowed even in " +
-                 "read-only mode, since it never modifies checklist files.")]
+                 "Vulnerability Details tabs) covering the selected checklists. Status and Severity " +
+                 "cells use Excel conditional formatting, so their color tracks the cell text even " +
+                 "after a manual edit in Excel. Allowed even in read-only mode, since it never " +
+                 "modifies checklist files.")]
     public string ExportExcelReport(
         [Description("Output .xlsx path.")] string path,
         [Description("Document ids to include. Omit to include all loaded checklists.")]
-        string[]? documentIds = null)
+        string[]? documentIds = null,
+        [Description("Append a team-only \"Internal Notes\" column at the end of the Vulnerability " +
+                     "Details sheet. On by default; set false to produce a report meant to leave " +
+                     "the team, since this data is never written to .ckl/.cklb either way.")]
+        bool includeInternalNotes = true)
     {
         lock (workspace.SyncRoot)
         {
@@ -559,12 +575,14 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
                 full += ".xlsx";
             }
 
-            ExcelReportGenerator.WriteReport(targets.Select(t => t.Document).ToList(), full);
+            ExcelReportGenerator.WriteReport(targets.Select(t => t.Document).ToList(), full,
+                includeInternalNotes: includeInternalNotes);
 
             return JsonSerializer.Serialize(new
             {
                 savedTo = full,
-                checklists = targets.Select(t => t.Id)
+                checklists = targets.Select(t => t.Id),
+                includeInternalNotes
             }, Json);
         }
     }
@@ -778,7 +796,7 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
     }
 
     private static void ApplyEdits(Vulnerability v, string? status, string? findingDetails,
-        string? comments, string? severityOverride, string? severityJustification)
+        string? comments, string? severityOverride, string? severityJustification, string? internalNotes = null)
     {
         if (status is not null)
         {
@@ -806,6 +824,11 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
         if (severityJustification is not null)
         {
             v.SeverityJustification = severityJustification;
+        }
+
+        if (internalNotes is not null)
+        {
+            v.InternalNotes = internalNotes;
         }
     }
 

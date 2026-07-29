@@ -111,6 +111,8 @@ public static class ExcelChecklistImporter
                 FixText = Cell("fixtext"),
                 FindingDetails = Cell("findingdetails"),
                 Comments = Cell("comments"),
+                // Team-only notes: present when the report was written with that column enabled.
+                InternalNotes = Cell("internalnotes"),
                 StigRef = stigName
             };
 

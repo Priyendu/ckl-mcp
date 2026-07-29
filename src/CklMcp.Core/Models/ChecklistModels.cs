@@ -159,6 +159,7 @@ public class Vulnerability : INotifyPropertyChanged
     private string _comments = string.Empty;
     private string _severityOverride = string.Empty;
     private string _severityJustification = string.Empty;
+    private string _internalNotes = string.Empty;
 
     public string Uuid { get; set; } = Guid.NewGuid().ToString();
     public string StigUuid { get; set; } = string.Empty;
@@ -201,6 +202,13 @@ public class Vulnerability : INotifyPropertyChanged
     }
 
     public string SeverityJustification { get => _severityJustification; set => Set(ref _severityJustification, value); }
+
+    /// <summary>
+    /// Team-internal notes. Deliberately NOT written to .ckl / .cklb — those formats have no
+    /// such field, and these notes aren't meant to be shared with the checklist. They live in
+    /// the Excel report (optional column) and round-trip through an Excel import.
+    /// </summary>
+    public string InternalNotes { get => _internalNotes; set => Set(ref _internalNotes, value); }
 
     public string EffectiveSeverity => string.IsNullOrWhiteSpace(SeverityOverride) ? SeverityValue : SeverityOverride;
     public string Category => Severity.ToCategory(EffectiveSeverity);

@@ -24,13 +24,13 @@ protected from accidental close.
 | `get_summary` | Totals by status, open findings by CAT I/II/III, per-document breakdown |
 | `list_findings` | Compact paged rows; filter by status / severity / STIG / document / free text |
 | `get_finding` | Full rule detail: discussion, check content, fix text, CCIs, comments |
-| `update_finding` | Set status, finding details, comments, severity override on one finding |
+| `update_finding` | Set status, finding details, comments, severity override, or internal notes on one finding |
 | `bulk_update_findings` | Same edits across many findings, selected by ids or filters |
 | `update_asset` | Edit target-asset fields (host name, IP, MAC, FQDN, …) |
 | `apply_xccdf_results` | Apply SCAP XCCDF scan results: pass/fail/notapplicable update matching findings |
 | `merge_prior_assessment` | Carry a prior assessment into a new STIG release (flags or resets rules whose text changed) |
 | `save_checklist` | Save in place, or save-as with `.ckl` ↔ `.cklb` format conversion |
-| `export_excel_report` | Vulnerator-style workbook: Executive Summary, POA&M, Vulnerability Details |
+| `export_excel_report` | Vulnerator-style workbook: Executive Summary, POA&M, Vulnerability Details; Status/Severity cells use live conditional formatting so a manual edit in Excel recolors them; optional (on by default) `include_internal_notes` column |
 | `compare_checklists` | Diff two checklists: status changes and added/removed findings |
 
 ## Build
@@ -102,6 +102,17 @@ claude mcp add ckl -- D:/work/ckl-mcp/publish/CklMcp.Server.exe --root D:/checkl
   }
 }
 ```
+
+## Internal notes
+
+Findings can carry a team-only `internal_notes` field (set via `update_finding` /
+`bulk_update_findings`, read via `get_finding`) that never travels in `.ckl` or `.cklb` — those
+formats have no such field, and this data isn't meant to leave the team. It appears as the last
+column of the Vulnerability Details sheet whenever `export_excel_report` is called
+(`include_internal_notes` defaults to `true`; pass `false` for a report meant to leave the team).
+Re-loading that `.xlsx` via `load_checklists` reads the column back in, so notes survive an
+export → hand-edit → reimport loop; they're simply dropped whenever a checklist is saved as
+`.ckl`/`.cklb`.
 
 ## Example agent workflow
 

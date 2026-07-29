@@ -218,6 +218,66 @@ public sealed class ToolTests : IDisposable
     }
 
     [Fact]
+    public void InternalNotesAreSettableAndExcludedFromCklOutput()
+    {
+        var path = WriteSampleCkl();
+        _tools.LoadChecklists(new[] { path });
+
+        var updated = Parse(_tools.UpdateFinding("V-220697", internalNotes: "Ask network team before closing."));
+        Assert.Equal("Ask network team before closing.", updated.GetProperty("internalNotes").GetString());
+
+        var finding = Parse(_tools.GetFinding("V-220697"));
+        Assert.Equal("Ask network team before closing.", finding.GetProperty("internalNotes").GetString());
+
+        _tools.SaveChecklist();
+        Assert.DoesNotContain("Ask network team before closing.", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void BulkUpdateSetsInternalNotes()
+    {
+        _tools.LoadChecklists(new[] { WriteSampleCkl() });
+
+        var result = Parse(_tools.BulkUpdateFindings(whereStatus: "Open", setInternalNotes: "Needs POC sign-off."));
+        Assert.Equal(1, result.GetProperty("updated").GetInt32());
+
+        var vuln = _workspace.Documents[0].Document.AllVulnerabilities.Single(v => v.VulnId == "V-220697");
+        Assert.Equal("Needs POC sign-off.", vuln.InternalNotes);
+    }
+
+    [Fact]
+    public void ExcelExportDefaultsToIncludingInternalNotesAndRoundTripsThem()
+    {
+        _tools.LoadChecklists(new[] { WriteSampleCkl() });
+        _tools.UpdateFinding("V-220697", internalNotes: "Internal-only tracking note.");
+
+        var reportPath = Path.Combine(_dir, "with-notes.xlsx");
+        var exportResult = Parse(_tools.ExportExcelReport(reportPath));
+        Assert.True(exportResult.GetProperty("includeInternalNotes").GetBoolean());
+
+        _tools.CloseChecklists(discardUnsaved: true);
+        _tools.LoadChecklists(new[] { reportPath });
+
+        var reimported = Parse(_tools.GetFinding("V-220697"));
+        Assert.Equal("Internal-only tracking note.", reimported.GetProperty("internalNotes").GetString());
+
+        var cklPath = Path.Combine(_dir, "reexported.ckl");
+        _tools.SaveChecklist(path: cklPath);
+        Assert.DoesNotContain("Internal-only tracking note.", File.ReadAllText(cklPath));
+    }
+
+    [Fact]
+    public void ExcelExportCanOmitInternalNotesColumn()
+    {
+        _tools.LoadChecklists(new[] { WriteSampleCkl() });
+        _tools.UpdateFinding("V-220697", internalNotes: "Should not appear.");
+
+        var reportPath = Path.Combine(_dir, "no-notes.xlsx");
+        var exportResult = Parse(_tools.ExportExcelReport(reportPath, includeInternalNotes: false));
+        Assert.False(exportResult.GetProperty("includeInternalNotes").GetBoolean());
+    }
+
+    [Fact]
     public void MergePriorAssessmentCarriesStatusesAndMarksTargetDirty()
     {
         // doc-1: prior assessment; doc-2: fresh checklist of the same STIG with one rule's text changed.

@@ -21,20 +21,25 @@ public static class ExcelReportGenerator
     private static readonly XLColor NotApplicableFill = XLColor.FromArgb(0x9A, 0xA7, 0xAD);
     private static readonly XLColor NotReviewedFill = XLColor.FromArgb(0xF0, 0xB4, 0x00);
 
+    /// <summary>Header and position of the optional team-only notes column (last on the Details sheet).</summary>
+    internal const string InternalNotesHeader = "Internal Notes";
+    internal const int InternalNotesColumn = 16;
+
     // Fixed location of the status-totals block the pie chart references (Executive Summary).
     internal const string SummarySheetName = "Executive Summary";
     internal const int StatusTotalsRow = 5;        // first data row (Open); header sits one row above
     internal const int StatusTotalsLabelCol = 13;  // M
     internal const int StatusTotalsValueCol = 14;  // N
 
-    public static void WriteReport(IReadOnlyList<ChecklistDocument> documents, string path, bool colorCodeStatus = true)
+    public static void WriteReport(IReadOnlyList<ChecklistDocument> documents, string path,
+        bool colorCodeStatus = true, bool includeInternalNotes = true)
     {
         byte[] bytes;
         using (var workbook = new XLWorkbook())
         {
             BuildSummarySheet(workbook, documents);
             BuildPoamSheet(workbook, documents);
-            BuildDetailsSheet(workbook, documents, colorCodeStatus);
+            BuildDetailsSheet(workbook, documents, colorCodeStatus, includeInternalNotes);
             using var clean = new MemoryStream();
             workbook.SaveAs(clean);
             bytes = clean.ToArray();
@@ -215,27 +220,34 @@ public static class ExcelReportGenerator
                     sheet.Cell(row, 12).Value = Sanitize(string.IsNullOrWhiteSpace(vuln.StigRef) ? stig.Title : vuln.StigRef, 500);
                     sheet.Cell(row, 13).Value = Sanitize(vuln.CciDisplay, 2000);
                     sheet.Cell(row, 17).Value = Sanitize(vuln.Comments);
-
-                    ApplySeverityFill(sheet.Cell(row, 3), vuln.EffectiveSeverity);
                     row++;
                 }
             }
         }
 
+        // Severity columns colour themselves by value, so edits in Excel stay correct.
+        ApplySeverityConditionalFormat(sheet, row - 1, 3, 5);
+
         FinishTableSheet(sheet, row, headers.Length, wrapColumns: new[] { 1, 4, 16, 17 }, wideColumns: new[] { 1 });
     }
 
-    private static void BuildDetailsSheet(XLWorkbook workbook, IReadOnlyList<ChecklistDocument> documents, bool colorCodeStatus)
+    private static void BuildDetailsSheet(XLWorkbook workbook, IReadOnlyList<ChecklistDocument> documents,
+        bool colorCodeStatus, bool includeInternalNotes)
     {
         var sheet = workbook.Worksheets.Add("Vulnerability Details");
-        var headers = new[]
+        var headers = new List<string>
         {
             "Asset", "STIG", "Vuln ID", "Rule ID", "Rule Version", "Severity", "Severity Override",
             "Status", "Rule Title", "Discussion", "Check Content", "Fix Text",
             "CCI References", "Finding Details", "Comments"
         };
 
-        for (var i = 0; i < headers.Length; i++)
+        if (includeInternalNotes)
+        {
+            headers.Add(InternalNotesHeader);
+        }
+
+        for (var i = 0; i < headers.Count; i++)
         {
             StyleHeader(sheet.Cell(1, i + 1), headers[i]);
         }
@@ -270,15 +282,9 @@ public static class ExcelReportGenerator
                     sheet.Cell(row, 13).Value = Sanitize(vuln.CciDisplay);
                     sheet.Cell(row, 14).Value = Sanitize(vuln.FindingDetails);
                     sheet.Cell(row, 15).Value = Sanitize(vuln.Comments);
-
-                    ApplySeverityFill(sheet.Cell(row, 6), vuln.EffectiveSeverity);
-                    if (colorCodeStatus)
+                    if (includeInternalNotes)
                     {
-                        ApplyStatusFill(sheet.Cell(row, 8), vuln.Status);
-                    }
-                    else if (vuln.Status == FindingStatus.Open)
-                    {
-                        sheet.Cell(row, 8).Style.Font.SetFontColor(XLColor.Red).Font.SetBold();
+                        sheet.Cell(row, InternalNotesColumn).Value = Sanitize(vuln.InternalNotes);
                     }
 
                     row++;
@@ -286,8 +292,69 @@ public static class ExcelReportGenerator
             }
         }
 
-        FinishTableSheet(sheet, row, headers.Length, wrapColumns: new[] { 9, 10, 11, 12, 14, 15 }, wideColumns: new[] { 9, 10, 11, 12 });
+        // Colour by rule, not by baked-in cell fills, so edits made in Excel recolour themselves.
+        var lastRow = row - 1;
+        ApplySeverityConditionalFormat(sheet, lastRow, 6, 7);
+        ApplyStatusConditionalFormat(sheet, lastRow, 8, colorCodeStatus);
+
+        var wrapColumns = includeInternalNotes
+            ? new[] { 9, 10, 11, 12, 14, 15, InternalNotesColumn }
+            : new[] { 9, 10, 11, 12, 14, 15 };
+
+        FinishTableSheet(sheet, row, headers.Count, wrapColumns, wideColumns: new[] { 9, 10, 11, 12 });
         sheet.RangeUsed()?.SetAutoFilter();
+    }
+
+    /// <summary>
+    /// Colours severity cells by value using conditional formatting, so a CAT changed in
+    /// Excel immediately takes the right colour instead of keeping a stale fill.
+    /// </summary>
+    private static void ApplySeverityConditionalFormat(IXLWorksheet sheet, int lastRow, params int[] columns)
+    {
+        if (lastRow < 2)
+        {
+            return;
+        }
+
+        foreach (var column in columns)
+        {
+            var range = sheet.Range(2, column, lastRow, column);
+            AddValueFormat(range, "CAT I", CatIFill);
+            AddValueFormat(range, "CAT II", CatIiFill);
+            AddValueFormat(range, "CAT III", CatIiiFill);
+        }
+    }
+
+    private static void ApplyStatusConditionalFormat(IXLWorksheet sheet, int lastRow, int column, bool fill)
+    {
+        if (lastRow < 2)
+        {
+            return;
+        }
+
+        var range = sheet.Range(2, column, lastRow, column);
+        if (fill)
+        {
+            AddValueFormat(range, FindingStatus.Open.ToDisplayString(), OpenFill);
+            AddValueFormat(range, FindingStatus.NotAFinding.ToDisplayString(), NotAFindingFill);
+            AddValueFormat(range, FindingStatus.NotApplicable.ToDisplayString(), NotApplicableFill);
+            AddValueFormat(range, FindingStatus.NotReviewed.ToDisplayString(), NotReviewedFill);
+        }
+        else
+        {
+            // Colour-coding off: still flag Open, but with emphasis only.
+            var style = range.AddConditionalFormat().WhenEquals($"\"{FindingStatus.Open.ToDisplayString()}\"");
+            style.Font.SetFontColor(XLColor.Red);
+            style.Font.SetBold();
+        }
+    }
+
+    private static void AddValueFormat(IXLRange range, string value, XLColor fill)
+    {
+        var style = range.AddConditionalFormat().WhenEquals($"\"{value}\"");
+        style.Fill.SetBackgroundColor(fill);
+        style.Font.SetFontColor(XLColor.White);
+        style.Font.SetBold();
     }
 
     private static void FinishTableSheet(IXLWorksheet sheet, int nextRow, int columnCount, int[] wrapColumns, int[] wideColumns)
@@ -321,31 +388,6 @@ public static class ExcelReportGenerator
         cell.Style.Fill.SetBackgroundColor(HeaderFill);
         cell.Style.Alignment.SetWrapText(true);
         cell.Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
-    }
-
-    private static void ApplySeverityFill(IXLCell cell, string severity)
-    {
-        var fill = Severity.Normalize(severity) switch
-        {
-            Severity.High => CatIFill,
-            Severity.Low => CatIiiFill,
-            _ => CatIiFill
-        };
-        cell.Style.Fill.SetBackgroundColor(fill);
-        cell.Style.Font.SetFontColor(XLColor.White).Font.SetBold();
-    }
-
-    private static void ApplyStatusFill(IXLCell cell, FindingStatus status)
-    {
-        var fill = status switch
-        {
-            FindingStatus.Open => OpenFill,
-            FindingStatus.NotAFinding => NotAFindingFill,
-            FindingStatus.NotApplicable => NotApplicableFill,
-            _ => NotReviewedFill
-        };
-        cell.Style.Fill.SetBackgroundColor(fill);
-        cell.Style.Font.SetFontColor(XLColor.White).Font.SetBold();
     }
 
     /// <summary>Excel's hard limit is 32,767 characters per cell; stay under it with room for the ellipsis.</summary>
