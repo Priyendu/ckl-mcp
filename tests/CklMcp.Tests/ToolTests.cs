@@ -192,6 +192,32 @@ public sealed class ToolTests : IDisposable
     }
 
     [Fact]
+    public void LoadChecklistsRoundTripsThroughExcelExport()
+    {
+        _tools.LoadChecklists(new[] { WriteSampleCkl() });
+
+        var reportPath = Path.Combine(_dir, "report.xlsx");
+        _tools.ExportExcelReport(reportPath);
+        _tools.CloseChecklists(discardUnsaved: true);
+
+        var loaded = Parse(_tools.LoadChecklists(new[] { reportPath }));
+        Assert.Equal(1, loaded.GetArrayLength());
+        var doc = loaded[0];
+        Assert.Equal(3, doc.GetProperty("totalFindings").GetInt32());
+        Assert.True(doc.GetProperty("unsavedChanges").GetBoolean());
+
+        var open = Parse(_tools.ListFindings(status: "Open"));
+        Assert.Equal(1, open.GetProperty("total").GetInt32());
+        Assert.Equal("V-220697", open.GetProperty("findings")[0].GetProperty("vulnId").GetString());
+
+        // An import has no source file, so save_checklist requires an explicit path.
+        Assert.Throws<McpException>(() => _tools.SaveChecklist());
+        var savedPath = Path.Combine(_dir, "reimported.ckl");
+        _tools.SaveChecklist(path: savedPath);
+        Assert.True(File.Exists(savedPath));
+    }
+
+    [Fact]
     public void MergePriorAssessmentCarriesStatusesAndMarksTargetDirty()
     {
         // doc-1: prior assessment; doc-2: fresh checklist of the same STIG with one rule's text changed.

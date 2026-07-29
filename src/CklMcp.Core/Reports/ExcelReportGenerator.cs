@@ -261,13 +261,15 @@ public static class ExcelReportGenerator
                         ? string.Empty
                         : Severity.ToCategory(vuln.SeverityOverride);
                     sheet.Cell(row, 8).Value = vuln.Status.ToDisplayString();
-                    sheet.Cell(row, 9).Value = Sanitize(vuln.RuleTitle, 1000);
-                    sheet.Cell(row, 10).Value = Sanitize(vuln.Discussion, 2000);
-                    sheet.Cell(row, 11).Value = Sanitize(vuln.CheckContent, 2000);
-                    sheet.Cell(row, 12).Value = Sanitize(vuln.FixText, 2000);
-                    sheet.Cell(row, 13).Value = Sanitize(vuln.CciDisplay, 2000);
-                    sheet.Cell(row, 14).Value = Sanitize(vuln.FindingDetails, 2000);
-                    sheet.Cell(row, 15).Value = Sanitize(vuln.Comments, 2000);
+                    // Full-length (up to Excel's cell limit) so this sheet round-trips back
+                    // into a checklist without losing rule text or the assessor's notes.
+                    sheet.Cell(row, 9).Value = Sanitize(vuln.RuleTitle);
+                    sheet.Cell(row, 10).Value = Sanitize(vuln.Discussion);
+                    sheet.Cell(row, 11).Value = Sanitize(vuln.CheckContent);
+                    sheet.Cell(row, 12).Value = Sanitize(vuln.FixText);
+                    sheet.Cell(row, 13).Value = Sanitize(vuln.CciDisplay);
+                    sheet.Cell(row, 14).Value = Sanitize(vuln.FindingDetails);
+                    sheet.Cell(row, 15).Value = Sanitize(vuln.Comments);
 
                     ApplySeverityFill(sheet.Cell(row, 6), vuln.EffectiveSeverity);
                     if (colorCodeStatus)

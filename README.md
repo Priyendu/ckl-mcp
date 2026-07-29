@@ -17,7 +17,7 @@ protected from accidental close.
 
 | Tool | Purpose |
 |---|---|
-| `load_checklists` | Load `.ckl` / `.cklb` files (or XCCDF benchmarks) into the session |
+| `load_checklists` | Load `.ckl` / `.cklb` files, XCCDF benchmarks, or a previously exported `.xlsx` report (round-trips Excel edits back in) into the session |
 | `new_from_benchmark` | Create a fresh Not Reviewed checklist from a DISA benchmark (.xml/.zip) |
 | `list_checklists` | Loaded documents with summaries and unsaved-change flags |
 | `close_checklists` | Remove documents (refuses to drop unsaved edits unless told to) |

@@ -27,11 +27,13 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
     // ---------------------------------------------------------------- loading
 
     [McpServerTool(Name = "load_checklists")]
-    [Description("Load one or more DISA STIG checklist files (.ckl or .cklb) into the session. " +
-                 "Returns a document id and summary for each. Also accepts XCCDF benchmark files, " +
-                 "which are imported as fresh Not Reviewed checklists.")]
+    [Description("Load one or more DISA STIG checklist files into the session: .ckl, .cklb, an XCCDF " +
+                 "benchmark (imported as a fresh Not Reviewed checklist), or a previously exported " +
+                 ".xlsx report (re-imported from its Vulnerability Details sheet, so edits made in " +
+                 "Excel can be saved back as .ckl/.cklb — one document per asset in the workbook). " +
+                 "Returns a document id and summary for each loaded checklist.")]
     public string LoadChecklists(
-        [Description("Absolute or relative paths of .ckl / .cklb files to load.")] string[] paths)
+        [Description("Absolute or relative paths of .ckl / .cklb / .xlsx files to load.")] string[] paths)
     {
         if (paths is null || paths.Length == 0)
         {
@@ -44,18 +46,21 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
             foreach (var path in paths)
             {
                 var full = options.ValidateReadPath(path);
-                ChecklistDocument document;
+                IReadOnlyList<ChecklistDocument> documents;
                 try
                 {
-                    document = ChecklistLoader.Load(full);
+                    documents = ChecklistLoader.LoadAll(full);
                 }
                 catch (Exception ex) when (ex is not McpException)
                 {
                     throw new McpException($"Failed to parse '{full}': {ex.Message}");
                 }
 
-                var entry = workspace.Add(document, dirty: document.SourcePath is null);
-                loaded.Add(DocumentSummary(entry));
+                foreach (var document in documents)
+                {
+                    var entry = workspace.Add(document, dirty: document.SourcePath is null);
+                    loaded.Add(DocumentSummary(entry));
+                }
             }
 
             return JsonSerializer.Serialize(loaded, Json);

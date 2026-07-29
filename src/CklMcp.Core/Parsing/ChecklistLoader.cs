@@ -11,6 +11,17 @@ namespace CklViewer.Parsing;
 /// </summary>
 public static class ChecklistLoader
 {
+    /// <summary>True for Excel workbooks, which may contain several assets in one file.</summary>
+    public static bool IsExcel(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is ".xlsx" or ".xlsm";
+
+    /// <summary>
+    /// Loads every checklist in a file. All formats yield exactly one, except an Excel
+    /// report, which yields one checklist per asset it contains.
+    /// </summary>
+    public static IReadOnlyList<ChecklistDocument> LoadAll(string path) =>
+        IsExcel(path) ? ExcelChecklistImporter.ImportFile(path) : new[] { Load(path) };
+
     public static ChecklistDocument Load(string path)
     {
         var extension = Path.GetExtension(path).ToLowerInvariant();
@@ -23,6 +34,10 @@ public static class ChecklistLoader
                 return XccdfBenchmarkParser.ParseFile(path);
             case ".ckl":
                 return CklParser.ParseFile(path);
+            case ".xlsx":
+            case ".xlsm":
+                // Single-document callers (e.g. Merge Prior) take the first asset in the workbook.
+                return ExcelChecklistImporter.ImportFile(path).First();
         }
 
         // .xml or unknown: an XCCDF benchmark and a CKL checklist are both XML,
