@@ -19,7 +19,7 @@ public static class CklMcpServiceCollectionExtensions
                 o.ServerInfo = new()
                 {
                     Name = "ckl-mcp",
-                    Version = "0.1.0"
+                    Version = "0.2.0"
                 };
                 o.ServerInstructions =
                     "Manage DISA STIG checklists (.ckl / .cklb). Typical flow: load_checklists (or " +
