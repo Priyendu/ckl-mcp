@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <AssemblyName>CklMcp.Http</AssemblyName>
     <RootNamespace>CklMcp.Http</RootNamespace>
+    <!-- Console-style server: no IIS hosting and no static files, so don't ship the Web SDK extras. -->
+    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>
