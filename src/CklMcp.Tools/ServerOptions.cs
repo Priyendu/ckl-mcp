@@ -1,6 +1,6 @@
-using ModelContextProtocol;
+﻿using ModelContextProtocol;
 
-namespace CklMcp.Server;
+namespace CklMcp.Tools;
 
 /// <summary>
 /// Command-line options: <c>--read-only</c> blocks every tool that edits findings or writes

@@ -12,8 +12,9 @@ results, carry a prior assessment into a new STIG release, and produce Excel rep
 > STIG checklists. Both share the same parsing and reporting engine, so files and Excel reports move
 > freely between them.
 
-It speaks MCP over **stdio**, so it works with any MCP-capable client: Claude, ChatGPT/Codex, Gemini,
-GitHub Copilot, Cursor, and the client SDKs from all three model vendors. See
+It speaks MCP over **stdio** for local clients, and over an opt-in, token-protected **Streamable HTTP**
+transport for hosted model APIs and remote clients. That covers Claude, ChatGPT/Codex, Gemini, GitHub
+Copilot, Cursor, and the client SDKs from all three model vendors. See
 [Connect your model](#connect-your-model).
 
 ## What it can do
@@ -50,9 +51,15 @@ cd ckl-mcp
 dotnet publish src/CklMcp.Server -c Release -o publish
 ```
 
-The server executable is `CklMcp.Server` (`CklMcp.Server.exe` on Windows). In the examples below,
-replace `/path/to/CklMcp.Server` with the real location. Use forward slashes in JSON on Windows
-(`C:/tools/ckl-mcp/CklMcp.Server.exe`) to avoid escaping.
+The main executable is `CklMcp.Server` (`CklMcp.Server.exe` on Windows), the **stdio** server that most
+clients want. In the examples below, replace `/path/to/CklMcp.Server` with the real location. Use
+forward slashes in JSON on Windows (`C:/tools/ckl-mcp/CklMcp.Server.exe`) to avoid escaping.
+
+A second executable, `CklMcp.Http`, serves the same tools over HTTP. You only need it for hosted model
+APIs or remote clients (see [HTTP mode](#http-mode)). It is built from `src/CklMcp.Http`, and its
+framework-dependent build also needs the [ASP.NET Core 8 runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+(the self-contained builds need nothing). The stdio server has no network code and needs only the base
+.NET runtime.
 
 ### 2. Connect your model
 
@@ -72,18 +79,19 @@ Ask your assistant:
 
 ## Connect your model
 
-MCP integration comes in two flavors. **This server works with the first today; the second needs an
-HTTP transport that is not built yet** (see [Hosted API connectors](#hosted-api-connectors-not-yet)).
+MCP integration comes in two flavors, and this project supports both:
 
-| Where the model runs | How it connects | Supported |
+| Where the model runs | How it connects | Executable |
 |---|---|---|
-| Local app or CLI (Claude, Codex, Gemini CLI, Copilot, Cursor) | Launches this server as a subprocess over stdio | Yes |
-| Your own code using a vendor SDK (Anthropic, OpenAI Agents, Google Gen AI) | Your code launches the subprocess and hands the tools to the model | Yes |
-| Vendor-hosted MCP connector (OpenAI Responses API, Anthropic Messages API, ChatGPT / Claude.ai custom connectors) | The vendor's cloud calls your server over HTTPS | Not yet |
+| Local app or CLI (Claude, Codex, Gemini CLI, Copilot, Cursor) | Launches the server as a subprocess over stdio | `CklMcp.Server` |
+| Your own code using a vendor SDK (Anthropic, OpenAI Agents, Google Gen AI) | Your code launches the subprocess and hands the tools to the model | `CklMcp.Server` |
+| Vendor-hosted MCP connector (OpenAI Responses API, Anthropic Messages API) | The vendor's cloud calls your server over HTTPS | `CklMcp.Http` behind a tunnel, see [HTTP mode](#http-mode) |
+| Any client that speaks Streamable HTTP | Connects to the server's URL with a bearer token | `CklMcp.Http` |
 
-Tested by the maintainer while developing: **Claude Code** and **Codex** (desktop). The other
-configurations below follow each vendor's current documentation but have not been exercised end to
-end. If one doesn't work for you, please open an issue.
+Tested by the maintainer while developing: **Claude Code** and **Codex** (desktop) over stdio, and
+**Claude Code** plus the MCP C# SDK client over HTTP. The other configurations below follow each
+vendor's current documentation but have not been exercised end to end, and the hosted-API connectors
+have not been run against the live vendor services. If one doesn't work for you, please open an issue.
 
 ### Anthropic
 
@@ -243,14 +251,187 @@ asyncio.run(main())
 Any other MCP client that can launch a stdio server takes the same three things: a command, its
 arguments, and (optionally) environment variables.
 
-### Hosted API connectors (not yet)
+## HTTP mode
 
-The [OpenAI Responses API](https://developers.openai.com/api/docs/guides/tools-connectors-mcp) and
-the [Anthropic Messages API MCP connector](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector)
+The [OpenAI Responses API](https://developers.openai.com/api/docs/guides/tools-connectors-mcp) and the
+[Anthropic Messages API MCP connector](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector)
 run in the vendor's cloud and can only reach **remote HTTPS** MCP servers, so a local stdio process
-can't be attached to them. An opt-in Streamable HTTP transport (loopback by default, bearer-token
-auth) is planned. Until then, use the client-side SDK routes above, which give API access to models
-from all three vendors.
+can't be attached to them. `CklMcp.Http` serves the same 15 tools over
+[Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) at `/mcp`
+for those cases, and for any client that would rather connect to a URL.
+
+It is a separate executable so the stdio server stays free of network code. It is also **opt-in and
+locked down by default**: loopback only, a bearer token on every request, and it refuses unsafe
+combinations at startup.
+
+### Run it
+
+```
+CklMcp.Http
+```
+
+That listens on `http://127.0.0.1:8765/mcp` and prints a bearer token generated for this run. For
+anything long-lived, choose your own token (24+ characters) and scope file access:
+
+```
+openssl rand -base64 32 > token.txt
+CklMcp.Http --token-file token.txt --root /path/to/checklists
+```
+
+The token can also come from the `CKL_MCP_TOKEN` environment variable. Every request must carry
+`Authorization: Bearer <token>`.
+
+| Option | Effect |
+|---|---|
+| `--host <ip>` | Address to bind: an IP or `localhost`. Default `127.0.0.1`. |
+| `--port <n>` | Port. Default `8765`; `0` picks a free one. |
+| `--token-file <path>` | Read the token from a file (otherwise `CKL_MCP_TOKEN`, otherwise one is generated and printed, loopback only). |
+| `--root <dir>`, `--read-only` | Same as the stdio server. Strongly recommended here. |
+| `--allow-origin <origin>` | Also accept browser requests from this origin (repeatable). Loopback origins are always accepted. |
+| `--allow-remote` | Required to bind anything but loopback. |
+
+### What protects it
+
+- **Loopback by default.** Binding any other address is refused unless you pass `--allow-remote`,
+  supply your own token, *and* set at least one `--root`. The addresses the OS actually bound are
+  re-checked after startup.
+- **A token is always required.** It is compared in constant time, tokens under 24 characters are
+  refused, and it is never written to logs (a generated token is printed once, to stderr, at startup).
+- **Browser origins are checked.** A request carrying an `Origin` header must come from a loopback
+  origin or one you allowed, which stops a web page from driving a local server.
+- **Typos fail loudly.** Unknown options are errors, so a misspelled security flag can't be silently
+  ignored.
+- **No TLS built in.** Terminate TLS in front of it (a tunnel or reverse proxy) for anything beyond
+  your own machine. Binding a non-loopback address prints a warning saying so.
+
+### One shared workspace
+
+`CklMcp.Http` is stateless: every request stands alone. (The newest MCP protocol revision has no HTTP
+sessions, and hosted APIs typically open a fresh connection per request.) So all clients share the
+**single in-memory workspace of the running process**: load a checklist in one call and edit it in a
+later one, even from a different connection. The consequences:
+
+- Anyone holding the token sees and edits the same loaded checklists.
+- The workspace, including unsaved edits, is lost when the process stops. Use `save_checklist`.
+
+### Connect over HTTP
+
+These clients connect straight to the URL. **Claude Code** is tested; the Gemini CLI and OpenAI Agents
+SDK snippets follow the vendors' docs.
+
+**Claude Code**
+
+```
+claude mcp add --transport http ckl-http http://127.0.0.1:8765/mcp --header "Authorization: Bearer $TOKEN"
+```
+
+**Gemini CLI** (`httpUrl` is Streamable HTTP; `url` would mean the older SSE transport), in `settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "ckl-http": {
+      "httpUrl": "http://127.0.0.1:8765/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" },
+      "timeout": 60000
+    }
+  }
+}
+```
+
+**OpenAI Agents SDK**:
+
+```python
+import os
+from agents import Agent, Runner
+from agents.mcp import MCPServerStreamableHttp
+
+async def main():
+    async with MCPServerStreamableHttp(
+        name="ckl",
+        params={
+            "url": "http://127.0.0.1:8765/mcp",
+            "headers": {"Authorization": f"Bearer {os.environ['CKL_MCP_TOKEN']}"},
+            "timeout": 30,
+        },
+    ) as server:
+        agent = Agent(name="STIG assistant", mcp_servers=[server],
+                      instructions="Use the ckl tools to answer questions about STIG checklists.")
+        result = await Runner.run(agent, "Load /path/to/host.ckl and summarize it.")
+        print(result.final_output)
+```
+
+### Hosted model APIs
+
+The OpenAI and Anthropic hosted connectors need a **public `https://` URL**. `CklMcp.Http` listens
+on plain HTTP, so run it locally (loopback) and expose it through a TLS-terminating tunnel, for example:
+
+```
+cloudflared tunnel --url http://127.0.0.1:8765
+ngrok http 8765
+tailscale funnel 8765
+```
+
+(Check your tunnel tool's documentation for current syntax.) Then use the `https://...` address it
+gives you, plus `/mcp`. The vendors describe their token field as an OAuth token; `CklMcp.Http` doesn't
+do OAuth, and simply accepts your static bearer secret in that field.
+
+**Anthropic Messages API** (beta header `mcp-client-2025-11-20`; the URL must start with `https://`):
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()
+response = client.beta.messages.create(
+    model="claude-sonnet-5",
+    max_tokens=1000,
+    messages=[{"role": "user", "content": "Load /data/checklists/host.ckl and summarize it."}],
+    mcp_servers=[{
+        "type": "url",
+        "url": "https://YOUR-TUNNEL-HOST/mcp",
+        "name": "ckl",
+        "authorization_token": "YOUR_TOKEN",
+    }],
+    tools=[{"type": "mcp_toolset", "mcp_server_name": "ckl"}],
+    betas=["mcp-client-2025-11-20"],
+)
+print(response)
+```
+
+**OpenAI Responses API**:
+
+```python
+from openai import OpenAI
+
+client = OpenAI()
+resp = client.responses.create(
+    model="YOUR_MODEL",  # any model that supports MCP tools
+    tools=[{
+        "type": "mcp",
+        "server_label": "ckl",
+        "server_url": "https://YOUR-TUNNEL-HOST/mcp",
+        "authorization": "YOUR_TOKEN",
+        "require_approval": "never",  # drop this line to approve each tool call yourself
+    }],
+    input="Load /data/checklists/host.ckl and summarize it.",
+)
+print(resp.output_text)
+```
+
+**Read this before exposing it to a hosted API:**
+
+- **Not yet tested against the live vendor services.** The snippets follow the vendors' docs, and the
+  server is tested with real HTTP clients, but no one has run this through OpenAI's or Anthropic's
+  cloud yet. Please report what you find.
+- **The file paths in your prompt are paths on the machine running `CklMcp.Http`.** There is no upload:
+  the model can only reach files that machine can read. Start it with `--root` pointing at a folder
+  of copies and, unless you need edits, `--read-only`. The Anthropic connector also lets you allowlist
+  individual tools in the `mcp_toolset` config.
+- **A tunnel makes the server reachable by anyone who has the URL**, and the token is the only barrier.
+  Use a long random one, don't reuse it, and stop the tunnel when you're done.
+- **The vendor's cloud sees everything the tools return**, including finding text. See
+  [Working safely](#working-safely); Anthropic's MCP connector, for one, is not covered by
+  zero-data-retention terms.
 
 ## Tools
 
@@ -279,6 +460,8 @@ from all three vendors.
 - **Edits are held in memory** until `save_checklist`. Unsaved documents are flagged, and
   `close_checklists` refuses to discard them unless told to.
 - **Scope file access** with `--root`. Without it, an agent can be handed any path.
+- **HTTP mode is a network service.** Keep it on loopback unless you have a reason not to, use a strong
+  token, and read [HTTP mode](#http-mode) before exposing it through a tunnel.
 - **Checklists can be sensitive.** They describe real systems and their weaknesses, and the default
   asset marking is `CUI`. Anything a tool returns is sent to whichever model provider you connected.
   Check your organization's rules before pointing a hosted model at real checklists. Anthropic's
@@ -317,8 +500,10 @@ Layout:
 
 ```
 src/CklMcp.Core/     parsing, writing, reporting (shared engine, from Ckl-viewer)
-src/CklMcp.Server/   the MCP server (stdio)
-tests/CklMcp.Tests/  engine tests plus tool-level tests
+src/CklMcp.Tools/    the MCP tools, workspace and file-access rules (shared by both transports)
+src/CklMcp.Server/   stdio executable
+src/CklMcp.Http/     Streamable HTTP executable (ASP.NET Core, token auth)
+tests/CklMcp.Tests/  engine tests, tool-level tests, and HTTP end-to-end tests
 ```
 
 `src/CklMcp.Core` is kept in step with [Ckl-viewer](https://github.com/Priyendu/Ckl-viewer): the

@@ -22,7 +22,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CklMcp.Core\CklMcp.Core.csproj" />
-    <ProjectReference Include="..\..\src\CklMcp.Server\CklMcp.Server.csproj" />
+    <ProjectReference Include="..\..\src\CklMcp.Tools\CklMcp.Tools.csproj" />
+    <ProjectReference Include="..\..\src\CklMcp.Http\CklMcp.Http.csproj" />
   </ItemGroup>
 
 </Project>

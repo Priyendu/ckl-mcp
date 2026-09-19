@@ -17,6 +17,7 @@ The full license text is at <https://www.apache.org/licenses/LICENSE-2.0>.
 |---|---|---|
 | ModelContextProtocol | 2.0.0-preview.3 | <https://github.com/modelcontextprotocol/csharp-sdk> |
 | ModelContextProtocol.Core | 2.0.0-preview.3 | <https://github.com/modelcontextprotocol/csharp-sdk> |
+| ModelContextProtocol.AspNetCore (only in the `CklMcp.Http` executable) | 2.0.0-preview.3 | <https://github.com/modelcontextprotocol/csharp-sdk> |
 | SixLabors.Fonts | 1.0.0 | <https://github.com/SixLabors/Fonts> |
 
 ## MIT License
@@ -32,6 +33,10 @@ The full license text is at <https://www.apache.org/licenses/LICENSE-2.0>.
 | Microsoft.Extensions.Hosting, .Configuration, .DependencyInjection, .Logging, .Options and related `Microsoft.Extensions.*` packages | 10.0.x |
 | Microsoft.Extensions.AI.Abstractions | 10.5.2 |
 | System.Diagnostics.DiagnosticSource, System.Diagnostics.EventLog, System.IO.Pipelines, System.Net.ServerSentEvents, System.Text.Encodings.Web, System.Text.Json | 10.0.x |
+
+The `CklMcp.Http` executable additionally uses the ASP.NET Core shared framework (MIT,
+Copyright (c) .NET Foundation and Contributors), which ships with the .NET runtime and is bundled into
+its self-contained builds.
 
 Each package's own license text and copyright notice is published with it on
 [nuget.org](https://www.nuget.org/) and is included in its `.nupkg`.

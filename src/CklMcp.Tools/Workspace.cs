@@ -1,7 +1,7 @@
-using CklViewer.Models;
+﻿using CklViewer.Models;
 using ModelContextProtocol;
 
-namespace CklMcp.Server;
+namespace CklMcp.Tools;
 
 /// <summary>A checklist held in the session, addressable by a short id like "doc-1".</summary>
 public sealed class LoadedChecklist(string id, ChecklistDocument document)

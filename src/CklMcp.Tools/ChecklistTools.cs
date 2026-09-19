@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CklViewer.Merging;
@@ -9,7 +9,7 @@ using CklViewer.Writing;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
-namespace CklMcp.Server;
+namespace CklMcp.Tools;
 
 [McpServerToolType]
 public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
@@ -30,7 +30,7 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
     [Description("Load one or more DISA STIG checklist files into the session: .ckl, .cklb, an XCCDF " +
                  "benchmark (imported as a fresh Not Reviewed checklist), or a previously exported " +
                  ".xlsx report (re-imported from its Vulnerability Details sheet, so edits made in " +
-                 "Excel can be saved back as .ckl/.cklb — one document per asset in the workbook). " +
+                 "Excel can be saved back as .ckl/.cklb â€” one document per asset in the workbook). " +
                  "Returns a document id and summary for each loaded checklist.")]
     public string LoadChecklists(
         [Description("Absolute or relative paths of .ckl / .cklb / .xlsx files to load.")] string[] paths)
@@ -172,7 +172,7 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
 
     [McpServerTool(Name = "list_findings")]
     [Description("List findings as compact rows with paging. Filter by status, severity, STIG, " +
-                 "document, or free-text search — the same filters as the Ckl-viewer UI. Use " +
+                 "document, or free-text search â€” the same filters as the Ckl-viewer UI. Use " +
                  "get_finding for the full rule text of a single finding.")]
     public string ListFindings(
         [Description("Filter to one document id (e.g. doc-1). Omit for all loaded checklists.")]
@@ -481,8 +481,8 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
 
     [McpServerTool(Name = "save_checklist")]
     [Description("Write a checklist back to disk. With no path, saves to the file it was loaded " +
-                 "from in its original format. With a path, does save-as — the extension (.ckl or " +
-                 ".cklb) picks the format, so this also converts between formats — and future saves " +
+                 "from in its original format. With a path, does save-as â€” the extension (.ckl or " +
+                 ".cklb) picks the format, so this also converts between formats â€” and future saves " +
                  "target the new file.")]
     public string SaveChecklist(
         [Description("Document id. Optional when exactly one checklist is loaded.")]
@@ -592,7 +592,7 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
                  "(typically freshly created via new_from_benchmark) keeps its rule set; the source " +
                  "checklist supplies status, finding details, comments, and severity overrides, " +
                  "matched by rule version, then V-key, then legacy IDs. Rules whose check/fix text " +
-                 "changed between versions get an audit note — or are reset to Not Reviewed when " +
+                 "changed between versions get an audit note â€” or are reset to Not Reviewed when " +
                  "reset_changed_rules is true. The target is modified in memory; save_checklist persists it.")]
     public string MergePriorAssessment(
         [Description("Document id of the new-version checklist to merge into.")] string targetDocumentId,
@@ -632,7 +632,7 @@ public sealed class ChecklistTools(Workspace workspace, ServerOptions options)
     }
 
     [McpServerTool(Name = "compare_checklists")]
-    [Description("Diff two loaded checklists by V-key — e.g. last month's assessment vs. a fresh " +
+    [Description("Diff two loaded checklists by V-key â€” e.g. last month's assessment vs. a fresh " +
                  "scan of the same STIG. Reports findings whose status changed plus findings that " +
                  "exist in only one of the two.")]
     public string CompareChecklists(

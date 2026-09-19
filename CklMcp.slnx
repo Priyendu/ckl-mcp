@@ -1,7 +1,9 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/CklMcp.Core/CklMcp.Core.csproj" />
+    <Project Path="src/CklMcp.Http/CklMcp.Http.csproj" />
     <Project Path="src/CklMcp.Server/CklMcp.Server.csproj" />
+    <Project Path="src/CklMcp.Tools/CklMcp.Tools.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/CklMcp.Tests/CklMcp.Tests.csproj" />

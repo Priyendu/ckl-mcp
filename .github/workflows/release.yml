@@ -30,6 +30,12 @@ jobs:
       - name: Publish self-contained
         run: dotnet publish src/CklMcp.Server -c Release -r win-x64 -p:SelfContained=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish/sc
 
+      - name: Publish HTTP server framework-dependent
+        run: dotnet publish src/CklMcp.Http -c Release -r win-x64 -p:SelfContained=false -p:PublishSingleFile=true -p:DebugType=none -o publish/http-fd
+
+      - name: Publish HTTP server self-contained
+        run: dotnet publish src/CklMcp.Http -c Release -r win-x64 -p:SelfContained=true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish/http-sc
+
       # Note: use $env:GITHUB_REF_NAME instead of `${{ github.ref_name }}` inside scripts —
       # inline expression interpolation into a script is a script-injection vector.
       - name: Zip artifacts
@@ -39,6 +45,8 @@ jobs:
           if ($env:GITHUB_REF_TYPE -ne 'tag') { $version = 'ci' }
           Compress-Archive -Path publish/fd/* -DestinationPath "CklMcp-$version-win-x64-framework-dependent.zip"
           Compress-Archive -Path publish/sc/* -DestinationPath "CklMcp-$version-win-x64-self-contained.zip"
+          Compress-Archive -Path publish/http-fd/* -DestinationPath "CklMcp-Http-$version-win-x64-framework-dependent.zip"
+          Compress-Archive -Path publish/http-sc/* -DestinationPath "CklMcp-Http-$version-win-x64-self-contained.zip"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -62,12 +70,17 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           if [ "$GITHUB_REF_TYPE" != "tag" ]; then version=ci; fi
-          for rid in linux-x64 osx-arm64; do
-            dotnet publish src/CklMcp.Server -c Release -r "$rid" \
-              -p:SelfContained=true -p:PublishSingleFile=true \
-              -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-              -p:DebugType=none -o "publish/$rid"
-            tar -czf "CklMcp-$version-$rid-self-contained.tar.gz" -C "publish/$rid" .
+          # stdio server -> CklMcp-<ver>-<rid>...; HTTP server -> CklMcp-Http-<ver>-<rid>...
+          for project in Server Http; do
+            prefix="CklMcp"
+            if [ "$project" = "Http" ]; then prefix="CklMcp-Http"; fi
+            for rid in linux-x64 osx-arm64; do
+              dotnet publish "src/CklMcp.$project" -c Release -r "$rid" \
+                -p:SelfContained=true -p:PublishSingleFile=true \
+                -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+                -p:DebugType=none -o "publish/$project-$rid"
+              tar -czf "$prefix-$version-$rid-self-contained.tar.gz" -C "publish/$project-$rid" .
+            done
           done
 
       - uses: actions/upload-artifact@v4
@@ -96,4 +109,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "ckl-mcp $GITHUB_REF_NAME" \
             --generate-notes \
-            --notes "MCP stdio server for DISA STIG checklists. Point your MCP client (Claude, Codex, Gemini CLI, VS Code Copilot, Cursor) at the executable; the README has a config snippet for each. Windows: the framework-dependent zip needs the [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0); the self-contained zip needs nothing. Linux and macOS: self-contained tarballs; run \`chmod +x CklMcp.Server\` if needed. macOS builds are not code-signed, so if Gatekeeper blocks the file run \`xattr -d com.apple.quarantine CklMcp.Server\`. The macOS build is untested by the maintainer. Unclassified data only."
+            --notes "MCP stdio server for DISA STIG checklists. Point your MCP client (Claude, Codex, Gemini CLI, VS Code Copilot, Cursor) at the executable; the README has a config snippet for each. Windows: the framework-dependent zip needs the [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0); the self-contained zip needs nothing. Linux and macOS: self-contained tarballs; run \`chmod +x CklMcp.Server\` if needed. macOS builds are not code-signed, so if Gatekeeper blocks the file run \`xattr -d com.apple.quarantine CklMcp.Server\`. The macOS build is untested by the maintainer. The CklMcp-Http-* archives hold the optional HTTP server for hosted model APIs and remote clients (see the README's HTTP mode section); its framework-dependent build also needs the ASP.NET Core 8 runtime. Unclassified data only."

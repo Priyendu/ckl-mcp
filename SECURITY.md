@@ -29,12 +29,24 @@ mind when deciding what to connect it to:
 - **Sensitive data.** Checklists can describe real systems and their weaknesses. Whatever the server
   returns goes to the model provider you connected.
 
+## HTTP mode
+
+`CklMcp.Http` is a network listener, so it has extra defenses, described in the README's
+[HTTP mode](README.md#http-mode) section: loopback by default, a bearer token on every request,
+browser-origin checks, and refusal to bind a non-loopback address without `--allow-remote`, an explicit
+token, and `--root`. It has **no built-in TLS**, and it uses one shared workspace for every client, so
+anyone with the token can see and edit what any other client loaded. If you expose it through a tunnel,
+the token is the only barrier: use a long random one and `--read-only` / `--root` where you can.
+
 ## In scope
 
 - Path handling that escapes `--root`
 - Unsafe parsing of `.ckl` (XML), `.cklb` (JSON), XCCDF/`.zip` benchmarks, or `.xlsx` files, such as
   XXE, zip-slip, or resource exhaustion from crafted input
 - Anything that makes the server write outside the paths a caller asked for
+- In `CklMcp.Http`: any way to reach a tool without the bearer token, to bypass the loopback or origin
+  checks, to bind beyond what the options allow, or to learn the token (for example from logs or
+  response timing)
 
 ## Out of scope
 
