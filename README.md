@@ -71,6 +71,9 @@ are worth knowing about now:
 | `--read-only` | Disables every tool that edits findings or writes checklist files (report export stays available). Good for analysis-only use. |
 | `--root <dir>` | Restricts all file access to this directory; repeatable. Without it, the server can read and write any path the process can. |
 
+Unknown flags are rejected at startup: a typo such as `--readonly` makes the server exit with an error
+instead of silently running read-write. `--help` lists the options.
+
 ### 3. Try it
 
 Ask your assistant:

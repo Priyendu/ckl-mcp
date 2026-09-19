@@ -9,10 +9,30 @@ namespace CklMcp.Tools;
 /// </summary>
 public sealed class ServerOptions
 {
+    public const string StdioUsage = """
+        ckl-mcp (stdio MCP server for DISA STIG checklists)
+
+        Usage: CklMcp.Server [options]
+
+          --read-only    Disable every tool that edits findings or writes checklist files.
+          --root <dir>   Restrict all file access to this directory (repeatable).
+          -h, --help     Show this help.
+
+        Unknown options are rejected, so a typo such as --readonly fails at startup instead of
+        silently leaving the server read-write. For the HTTP server, see CklMcp.Http --help.
+        """;
+
     public bool ReadOnly { get; private set; }
     public List<string> Roots { get; } = new();
 
-    public static ServerOptions Parse(string[] args)
+    /// <summary>
+    /// Parses <c>--read-only</c> and <c>--root</c>. With <paramref name="rejectUnknown"/> false (the
+    /// default) any other argument is skipped, which lets a host that has options of its own, such
+    /// as the HTTP server, share this parser and validate those itself. With it true, anything
+    /// unrecognized is an error: these flags are safety settings, and a silently ignored typo
+    /// would quietly turn one off.
+    /// </summary>
+    public static ServerOptions Parse(string[] args, bool rejectUnknown = false)
     {
         var options = new ServerOptions();
         for (var i = 0; i < args.Length; i++)
@@ -35,6 +55,13 @@ public sealed class ServerOptions
                     }
 
                     options.Roots.Add(root);
+                    break;
+                default:
+                    if (rejectUnknown)
+                    {
+                        throw new ArgumentException($"Unknown option '{args[i]}'.");
+                    }
+
                     break;
             }
         }

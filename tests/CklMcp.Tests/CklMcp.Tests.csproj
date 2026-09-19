@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\src\CklMcp.Core\CklMcp.Core.csproj" />
     <ProjectReference Include="..\..\src\CklMcp.Tools\CklMcp.Tools.csproj" />
     <ProjectReference Include="..\..\src\CklMcp.Http\CklMcp.Http.csproj" />
+    <!-- Build order only: StdioServerProcessTests runs the real executable. -->
+    <ProjectReference Include="..\..\src\CklMcp.Server\CklMcp.Server.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
