@@ -3,13 +3,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch: # manual runs build the zips and upload them as workflow artifacts, without creating a release
+  workflow_dispatch: # manual runs build the packages and upload them as workflow artifacts, without creating a release
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -40,20 +40,60 @@ jobs:
           Compress-Archive -Path publish/fd/* -DestinationPath "CklMcp-$version-win-x64-framework-dependent.zip"
           Compress-Archive -Path publish/sc/* -DestinationPath "CklMcp-$version-win-x64-self-contained.zip"
 
-      - name: Upload workflow artifacts
-        if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: CklMcp-win-x64
+          name: dist-windows
           path: "*.zip"
 
+  # Built on a Linux runner so the executable bit survives inside the tarballs.
+  unix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Publish and pack
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then version=ci; fi
+          for rid in linux-x64 osx-arm64; do
+            dotnet publish src/CklMcp.Server -c Release -r "$rid" \
+              -p:SelfContained=true -p:PublishSingleFile=true \
+              -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+              -p:DebugType=none -o "publish/$rid"
+            tar -czf "CklMcp-$version-$rid-self-contained.tar.gz" -C "publish/$rid" .
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-unix
+          path: "*.tar.gz"
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [windows, unix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
       - name: Create GitHub release
-        if: github.ref_type == 'tag'
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create $env:GITHUB_REF_NAME (Get-ChildItem *.zip) `
-            --title "ckl-mcp $env:GITHUB_REF_NAME" `
-            --generate-notes `
-            --notes "MCP stdio server for DISA STIG checklists — point your MCP host (VS Code Copilot, Claude Code, Claude Desktop) at CklMcp.Server.exe; see the README for config snippets. The framework-dependent zip needs the [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0); the self-contained zip runs on any 64-bit Windows 10/11 machine. Unclassified data only."
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "ckl-mcp $GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "MCP stdio server for DISA STIG checklists. Point your MCP client (Claude, Codex, Gemini CLI, VS Code Copilot, Cursor) at the executable; the README has a config snippet for each. Windows: the framework-dependent zip needs the [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0); the self-contained zip needs nothing. Linux and macOS: self-contained tarballs; run \`chmod +x CklMcp.Server\` if needed. macOS builds are not code-signed, so if Gatekeeper blocks the file run \`xattr -d com.apple.quarantine CklMcp.Server\`. The macOS build is untested by the maintainer. Unclassified data only."
